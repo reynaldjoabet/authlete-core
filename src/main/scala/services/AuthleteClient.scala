@@ -91,6 +91,10 @@ import cats.effect.kernel.syntax.resource
 import com.github.plokhotnyuk.jsoniter_scala.core.*
 import authlete.models.FailedRequest
 import org.http4s.Response
+import authlete.models.JsoniterSyntaticSugar.*
+import authlete.models.*
+import authlete.models.given
+
 final class AuthleteClient[F[*]: Concurrent](
     backend: Backend[F],
     config: AuthleteConfig,
@@ -105,14 +109,17 @@ final class AuthleteClient[F[*]: Concurrent](
 
   private val baseUri = Uri(config.baseUrl)
 
-  def handleHttpFailure(statusCode: Int, body: String) = statusCode match {
+  def handleHttpFailure[B: JsonValueCodec](
+      statusCode: Int,
+      body: String
+  ): F[B] = statusCode match {
 
     case 400 | 401 | 403 | 500 =>
       for {
         res <- Either
           .catchOnly[Throwable](readFromString[Result](body))
           .liftTo[F]
-        err <- Concurrent[F].raiseError[AuthorizationResponse](
+        err <- Concurrent[F].raiseError[B](
           FailedRequest(
             statusCode,
             res.resultMessage.getOrElse(""),
@@ -157,26 +164,8 @@ final class AuthleteClient[F[*]: Concurrent](
                   )
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[AuthorizationResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
               case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
+                handleHttpFailure[AuthorizationResponse](other, body)
 
             }
 
@@ -213,26 +202,8 @@ final class AuthleteClient[F[*]: Concurrent](
                   )
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[AuthorizationFailResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
               case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
+                handleHttpFailure[AuthorizationFailResponse](other, body)
 
             }
 
@@ -270,36 +241,15 @@ final class AuthleteClient[F[*]: Concurrent](
                   )
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[AuthorizationIssueResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
               case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
-
+                handleHttpFailure[AuthorizationIssueResponse](other, body)
             }
-
           case Left(errorMessage) =>
             Concurrent[F].raiseError(
               new Exception(s"HTTP transport error: $errorMessage")
             )
         }
       }
-
   }
 
   override def backchannelAuthentication(
@@ -326,26 +276,10 @@ final class AuthleteClient[F[*]: Concurrent](
                   )
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F]
-                    .raiseError[BackchannelAuthenticationResponse](
-                      FailedRequest(
-                        response.code.code,
-                        res.resultMessage.getOrElse(""),
-                        Some(res.toJson)
-                      )
-                    )
-                } yield err // Unreachable, but necessary for type alignment
-
               case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
+                handleHttpFailure[BackchannelAuthenticationResponse](
+                  other,
+                  body
                 )
 
             }
@@ -384,27 +318,10 @@ final class AuthleteClient[F[*]: Concurrent](
                     )
                   )
                   .liftTo[F]
-
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F]
-                    .raiseError[BackchannelAuthenticationCompleteResponse](
-                      FailedRequest(
-                        response.code.code,
-                        res.resultMessage.getOrElse(""),
-                        Some(res.toJson)
-                      )
-                    )
-                } yield err // Unreachable, but necessary for type alignment
-
               case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
+                handleHttpFailure[BackchannelAuthenticationCompleteResponse](
+                  other,
+                  body
                 )
 
             }
@@ -442,28 +359,11 @@ final class AuthleteClient[F[*]: Concurrent](
                   )
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F]
-                    .raiseError[BackchannelAuthenticationFailResponse](
-                      FailedRequest(
-                        response.code.code,
-                        res.resultMessage.getOrElse(""),
-                        Some(res.toJson)
-                      )
-                    )
-                } yield err // Unreachable, but necessary for type alignment
-
               case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
+                handleHttpFailure[BackchannelAuthenticationFailResponse](
+                  other,
+                  body
                 )
-
             }
 
           case Left(errorMessage) =>
@@ -498,27 +398,10 @@ final class AuthleteClient[F[*]: Concurrent](
                     readFromString[BackchannelAuthenticationIssueResponse](body)
                   )
                   .liftTo[F]
-
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F]
-                    .raiseError[BackchannelAuthenticationIssueResponse](
-                      FailedRequest(
-                        response.code.code,
-                        res.resultMessage.getOrElse(""),
-                        Some(res.toJson)
-                      )
-                    )
-                } yield err // Unreachable, but necessary for type alignment
-
               case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
+                handleHttpFailure[BackchannelAuthenticationIssueResponse](
+                  other,
+                  body
                 )
 
             }
@@ -605,27 +488,10 @@ final class AuthleteClient[F[*]: Concurrent](
                 Concurrent[F].pure(
                   ClientExtensionRequestableScopesGetResponse(None)
                 )
-
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F]
-                    .raiseError[ClientExtensionRequestableScopesGetResponse](
-                      FailedRequest(
-                        response.code.code,
-                        res.resultMessage.getOrElse(""),
-                        Some(res.toJson)
-                      )
-                    )
-                } yield err // Unreachable, but necessary for type alignment
-
               case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
+                handleHttpFailure[ClientExtensionRequestableScopesGetResponse](
+                  other,
+                  body
                 )
 
             }
@@ -673,27 +539,10 @@ final class AuthleteClient[F[*]: Concurrent](
                   )
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F]
-                    .raiseError[ClientExtensionRequestableScopesUpdateResponse](
-                      FailedRequest(
-                        response.code.code,
-                        res.resultMessage.getOrElse(""),
-                        Some(res.toJson)
-                      )
-                    )
-                } yield err // Unreachable, but necessary for type alignment
-
               case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
+                handleHttpFailure[
+                  ClientExtensionRequestableScopesUpdateResponse
+                ](other, body)
 
             }
 
@@ -727,27 +576,8 @@ final class AuthleteClient[F[*]: Concurrent](
         response.body match {
           case Right(body) =>
             response.code.code match {
-              case 200 => body.pure[F]
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[String](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
-              case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
+              case 200   => body.pure[F]
+              case other => handleHttpFailure[String](other, body)
 
             }
 
@@ -780,29 +610,9 @@ final class AuthleteClient[F[*]: Concurrent](
                   )
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[DeviceAuthorizationResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
               case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
-
+                handleHttpFailure[DeviceAuthorizationResponse](other, body)
             }
-
           case Left(errorMessage) =>
             Concurrent[F].raiseError(
               new Exception(s"HTTP transport error: $errorMessage")
@@ -834,27 +644,8 @@ final class AuthleteClient[F[*]: Concurrent](
                     readFromString[DeviceCompleteResponse](body)
                   )
                   .liftTo[F]
-
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[DeviceCompleteResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
               case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
+                handleHttpFailure[DeviceCompleteResponse](other, body)
 
             }
 
@@ -890,28 +681,8 @@ final class AuthleteClient[F[*]: Concurrent](
                     readFromString[DeviceVerificationResponse](body)
                   )
                   .liftTo[F]
-
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[DeviceVerificationResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
               case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
-
+                handleHttpFailure[DeviceVerificationResponse](other, body)
             }
 
           case Left(errorMessage) =>
@@ -944,28 +715,8 @@ final class AuthleteClient[F[*]: Concurrent](
                     readFromString[ClientRegistrationResponse](body)
                   )
                   .liftTo[F]
-
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[ClientRegistrationResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
               case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
-
+                handleHttpFailure[ClientRegistrationResponse](other, body)
             }
 
           case Left(errorMessage) =>
@@ -1004,27 +755,8 @@ final class AuthleteClient[F[*]: Concurrent](
                   )
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F]
-                    .raiseError[ClientRegistrationDeleteResponse](
-                      FailedRequest(
-                        response.code.code,
-                        res.resultMessage.getOrElse(""),
-                        Some(res.toJson)
-                      )
-                    )
-                } yield err // Unreachable, but necessary for type alignment
-
               case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
+                handleHttpFailure[ClientRegistrationDeleteResponse](other, body)
 
             }
 
@@ -1065,27 +797,8 @@ final class AuthleteClient[F[*]: Concurrent](
                   )
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F]
-                    .raiseError[ClientRegistrationGetResponse](
-                      FailedRequest(
-                        response.code.code,
-                        res.resultMessage.getOrElse(""),
-                        Some(res.toJson)
-                      )
-                    )
-                } yield err // Unreachable, but necessary for type alignment
-
               case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
+                handleHttpFailure[ClientRegistrationGetResponse](other, body)
 
             }
 
@@ -1128,27 +841,8 @@ final class AuthleteClient[F[*]: Concurrent](
                   )
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F]
-                    .raiseError[ClientRegistrationUpdateResponse](
-                      FailedRequest(
-                        response.code.code,
-                        res.resultMessage.getOrElse(""),
-                        Some(res.toJson)
-                      )
-                    )
-                } yield err // Unreachable, but necessary for type alignment
-
               case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
+                handleHttpFailure[ClientRegistrationUpdateResponse](other, body)
 
             }
 
@@ -1178,27 +872,7 @@ final class AuthleteClient[F[*]: Concurrent](
                 Either
                   .catchOnly[Throwable](readFromString[GMResponse](body))
                   .liftTo[F]
-
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[GMResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
-              case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
+              case other => handleHttpFailure[GMResponse](other, body)
 
             }
 
@@ -1233,27 +907,7 @@ final class AuthleteClient[F[*]: Concurrent](
                   )
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[HskCreateResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
-              case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
-
+              case other => handleHttpFailure[HskCreateResponse](other, body)
             }
 
           case Left(errorMessage) =>
@@ -1283,26 +937,7 @@ final class AuthleteClient[F[*]: Concurrent](
                   )
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[HskDeleteResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
-              case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
+              case other => handleHttpFailure(other, body)
 
             }
 
@@ -1332,26 +967,7 @@ final class AuthleteClient[F[*]: Concurrent](
                   )
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[HskGetResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
-              case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
+              case other => handleHttpFailure[HskGetResponse](other, body)
 
             }
 
@@ -1382,26 +998,7 @@ final class AuthleteClient[F[*]: Concurrent](
                   )
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[HskGetListResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
-              case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
+              case other => handleHttpFailure[HskGetListResponse](other, body)
 
             }
 
@@ -1434,28 +1031,8 @@ final class AuthleteClient[F[*]: Concurrent](
                     readFromString[IdtokenReissueResponse](body)
                   )
                   .liftTo[F]
-
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[IdtokenReissueResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
               case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
-
+                handleHttpFailure[IdtokenReissueResponse](other, body)
             }
 
           case Left(errorMessage) =>
@@ -1489,26 +1066,8 @@ final class AuthleteClient[F[*]: Concurrent](
                   )
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[IntrospectionResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
               case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
+                handleHttpFailure[IntrospectionResponse](other, body)
 
             }
 
@@ -1544,28 +1103,8 @@ final class AuthleteClient[F[*]: Concurrent](
                   )
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F]
-                    .raiseError[StandardIntrospectionResponse](
-                      FailedRequest(
-                        response.code.code,
-                        res.resultMessage.getOrElse(""),
-                        Some(res.toJson)
-                      )
-                    )
-                } yield err // Unreachable, but necessary for type alignment
-
               case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
-
+                handleHttpFailure[StandardIntrospectionResponse](other, body)
             }
 
           case Left(errorMessage) =>
@@ -1600,26 +1139,8 @@ final class AuthleteClient[F[*]: Concurrent](
               case 204 =>
                 Concurrent[F].pure(ServiceJwksGetResponse(None))
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[ServiceJwksGetResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
               case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
+                handleHttpFailure[ServiceJwksGetResponse](other, body)
 
             }
 
@@ -1655,26 +1176,7 @@ final class AuthleteClient[F[*]: Concurrent](
                   )
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[JoseVerifyResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
-              case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
+              case other => handleHttpFailure[JoseVerifyResponse](other, body)
 
             }
 
@@ -1708,27 +1210,8 @@ final class AuthleteClient[F[*]: Concurrent](
                   )
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[PushedAuthorizationResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
               case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
-
+                handleHttpFailure[PushedAuthorizationResponse](other, body)
             }
 
           case Left(errorMessage) =>
@@ -1760,27 +1243,7 @@ final class AuthleteClient[F[*]: Concurrent](
                     readFromString[RevocationResponse](body)
                   )
                   .liftTo[F]
-
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[RevocationResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
-              case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
+              case other => handleHttpFailure[RevocationResponse](other, body)
 
             }
 
@@ -1809,26 +1272,7 @@ final class AuthleteClient[F[*]: Concurrent](
                   .catchOnly[Throwable](readFromString[InfoResponse](body))
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[InfoResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
-              case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
+              case other => handleHttpFailure[InfoResponse](other, body)
 
             }
 
@@ -1858,26 +1302,7 @@ final class AuthleteClient[F[*]: Concurrent](
                   .catchOnly[Throwable](readFromString[TokenResponse](body))
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[TokenResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
-              case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
+              case other => handleHttpFailure[TokenResponse](other, body)
 
             }
 
@@ -1913,26 +1338,7 @@ final class AuthleteClient[F[*]: Concurrent](
                   )
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[TokenFailResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
-              case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
+              case other => handleHttpFailure[TokenFailResponse](other, body)
 
             }
 
@@ -1968,26 +1374,7 @@ final class AuthleteClient[F[*]: Concurrent](
                   )
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[TokenIssueResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
-              case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
+              case other => handleHttpFailure[TokenIssueResponse](other, body)
 
             }
 
@@ -2023,27 +1410,7 @@ final class AuthleteClient[F[*]: Concurrent](
                   )
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[TokenCreateResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
-              case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
-
+              case other => handleHttpFailure[TokenCreateResponse](other, body)
             }
 
           case Left(errorMessage) =>
@@ -2068,27 +1435,7 @@ final class AuthleteClient[F[*]: Concurrent](
           case Right(body) =>
             response.code.code match {
               case 204 => Concurrent[F].unit // No content, successful deletion
-
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[Unit](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
-              case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
+              case other => handleHttpFailure[Unit](other, body)
 
             }
 
@@ -2133,27 +1480,7 @@ final class AuthleteClient[F[*]: Concurrent](
                   )
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[TokenGetListResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
-              case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
-
+              case other => handleHttpFailure[TokenGetListResponse](other, body)
             }
 
           case Left(errorMessage) =>
@@ -2187,27 +1514,7 @@ final class AuthleteClient[F[*]: Concurrent](
                   )
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[TokenRevokeResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
-              case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
-
+              case other => handleHttpFailure[TokenRevokeResponse](other, body)
             }
 
           case Left(errorMessage) =>
@@ -2242,26 +1549,7 @@ final class AuthleteClient[F[*]: Concurrent](
                   )
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[TokenUpdateResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
-              case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
+              case other => handleHttpFailure[TokenUpdateResponse](other, body)
 
             }
 
@@ -2294,27 +1582,7 @@ final class AuthleteClient[F[*]: Concurrent](
                   .catchOnly[Throwable](readFromString[UserinfoResponse](body))
                   .liftTo[F]
 
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[UserinfoResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
-              case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
-
+              case other => handleHttpFailure[UserinfoResponse](other, body)
             }
 
           case Left(errorMessage) =>
@@ -2348,28 +1616,8 @@ final class AuthleteClient[F[*]: Concurrent](
                     readFromString[UserinfoIssueResponse](body)
                   )
                   .liftTo[F]
-
-              case 400 | 401 | 403 | 500 =>
-                for {
-                  res <- Either
-                    .catchOnly[Throwable](readFromString[Result](body))
-                    .liftTo[F]
-                  err <- Concurrent[F].raiseError[UserinfoIssueResponse](
-                    FailedRequest(
-                      response.code.code,
-                      res.resultMessage.getOrElse(""),
-                      Some(res.toJson)
-                    )
-                  )
-                } yield err // Unreachable, but necessary for type alignment
-
               case other =>
-                logger.error(
-                  s"Unhandled HTTP status code $other with body $body"
-                ) *> Concurrent[F].raiseError(
-                  new Exception(s"Unhandled HTTP status code $other")
-                )
-
+                handleHttpFailure[UserinfoIssueResponse](other, body)
             }
 
           case Left(errorMessage) =>
@@ -2378,6 +1626,7 @@ final class AuthleteClient[F[*]: Concurrent](
             )
         }
       }
+
   }
 
 }
