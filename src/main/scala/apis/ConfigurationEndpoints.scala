@@ -53,7 +53,7 @@ trait ConfigurationEndpoints[F[*]] {
   def serviceConfiguration(
       pretty: Option[Boolean] = None,
       patch: Option[String] = None
-  ): F[Any]
+  ): F[String]
 
 }
 
@@ -66,5 +66,5 @@ class ConfigurationEndpointsImpl[F[*]: Concurrent](
   override def serviceConfiguration(
       pretty: Option[Boolean],
       patch: Option[String]
-  ): F[Any] = ???
+  ): F[String] = ???
 }

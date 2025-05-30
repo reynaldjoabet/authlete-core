@@ -16,7 +16,17 @@ import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import io.circe.{ACursor, Decoder, Encoder, Json}
 import io.circe.syntax.* // import for asJson extension
 import org.http4s.headers.`Content-Type`
-import org.http4s.{DecodeFailure, DecodeResult, EntityDecoder, EntityEncoder, InvalidMessageBodyFailure, MalformedMessageBodyFailure, MediaRange, MediaType, Uri}
+import org.http4s.{
+  DecodeFailure,
+  DecodeResult,
+  EntityDecoder,
+  EntityEncoder,
+  InvalidMessageBodyFailure,
+  MalformedMessageBodyFailure,
+  MediaRange,
+  MediaType,
+  Uri
+}
 import com.github.plokhotnyuk.jsoniter_scala.circe.JsoniterScalaCodec.*
 import sttp.model.StatusCode
 import cats.effect.IO
@@ -24,17 +34,19 @@ import io.circe.JsoniterScalaCodec
 
 package object models {
 
-trait CirceInstances {
+  trait CirceInstances {
 
-  private val defaultWriterConfig: WriterConfig = WriterConfig.withPreferredBufSize(100 * 1024)
+    private val defaultWriterConfig: WriterConfig =
+      WriterConfig.withPreferredBufSize(100 * 1024)
 
-
-def jsonEncoderOf[A: Encoder]: EntityEncoder[IO, A] =
-  EntityEncoder
-    .byteArrayEncoder[IO]
-    .contramap[A] { value => writeToArray(value.asJson, defaultWriterConfig) }
-    .withContentType(`Content-Type`(MediaType.application.json))
-}
+    def jsonEncoderOf[A: Encoder]: EntityEncoder[IO, A] =
+      EntityEncoder
+        .byteArrayEncoder[IO]
+        .contramap[A] { value =>
+          writeToArray(value.asJson, defaultWriterConfig)
+        }
+        .withContentType(`Content-Type`(MediaType.application.json))
+  }
   given decodeUUID: Decoder[UUID] =
     Decoder.decodeString.map(str => UUID.fromString(str))
 

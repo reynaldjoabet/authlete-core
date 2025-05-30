@@ -1,6 +1,5 @@
-
 import io.circe._, io.circe.generic.auto._
-import com.github.plokhotnyuk.jsoniter_scala.circe.CirceCodecs.* 
+import com.github.plokhotnyuk.jsoniter_scala.circe.CirceCodecs.*
 
 import com.github.plokhotnyuk.jsoniter_scala.circe._
 
@@ -25,8 +24,6 @@ case class Person(name: String, age: Int)
 // circe AST(io.circe.Json) => case class
 val decoded: Either[io.circe.Error, Person] = json.flatMap(_.as[Person])
 //Uses implicit Decoder[Person], which is derived automatically in this case.
-
-
 
 val person = Person("Alice", 30)
 val jsonFromPerson: io.circe.Json = person.asJson
@@ -83,26 +80,26 @@ object Bot {
 
   given Decoder[MapEntry] with {
     def apply(c: HCursor) = c.get[Type]("type").flatMap {
-      case Type.Rock => summon[Decoder[MapEntry.Rock]](c)
+      case Type.Rock     => summon[Decoder[MapEntry.Rock]](c)
       case Type.Assassin => summon[Decoder[MapEntry.Assassin]](c)
-      case Type.Scout => summon[Decoder[MapEntry.Scout]](c)
-      case Type.Tank => summon[Decoder[MapEntry.Tank]](c)
-      case Type.Base => summon[Decoder[MapEntry.Base]](c)
+      case Type.Scout    => summon[Decoder[MapEntry.Scout]](c)
+      case Type.Tank     => summon[Decoder[MapEntry.Tank]](c)
+      case Type.Base     => summon[Decoder[MapEntry.Base]](c)
     }
   }
 
   case class Player(
-    team: Team,
-    money: Int,
-    base: Coord,
-    health: Int
+      team: Team,
+      money: Int,
+      base: Coord,
+      health: Int
   )
 
   case class State(
-    map: List[MapEntry],
-    you: Team,
-    player1: Player,
-    player2: Player
+      map: List[MapEntry],
+      you: Team,
+      player1: Player,
+      player2: Player
   )
 
   enum ReadingError {
@@ -112,13 +109,15 @@ object Bot {
   }
 
   def states: LazyList[Either[ReadingError, State]] = {
-    val next = Try(readFromStream[Json](
-      System.in,
-      ReaderConfig.withCheckForEndOfInput(false)
-    )) match {
+    val next = Try(
+      readFromStream[Json](
+        System.in,
+        ReaderConfig.withCheckForEndOfInput(false)
+      )
+    ) match {
       case Success(json) => json.as[State].left.map(ReadingError.DecodeError(_))
       case Failure(e: JsonReaderException) => Left(ReadingError.InvalidJson(e))
-      case Failure(e) => Left(ReadingError.Error(e))
+      case Failure(e)                      => Left(ReadingError.Error(e))
     }
 
     next #:: states
@@ -129,15 +128,18 @@ object Bot {
     Try(states.foreach {
       case Left(err) => System.err.println(err)
       case Right(state) =>
-        val (me, enemy) = if state.you == Team.Player1 then (state.player1, state.player2)
+        val (me, enemy) =
+          if state.you == Team.Player1 then (state.player1, state.player2)
           else (state.player2, state.player1)
         if me.money >= 10 then {
           val myBaseCoord = me.base
           val enemyBaseCoord = enemy.base
-          println(s"Build Scout (${myBaseCoord.x}, ${myBaseCoord.y + 1}) (${enemyBaseCoord.x}, ${enemyBaseCoord.y}) Down")
+          println(
+            s"Build Scout (${myBaseCoord.x}, ${myBaseCoord.y + 1}) (${enemyBaseCoord.x}, ${enemyBaseCoord.y}) Down"
+          )
         } else println("No-op")
-    }).recover {
-      case err => System.err.println(err)
+    }).recover { case err =>
+      System.err.println(err)
     }
   }
 
