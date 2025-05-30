@@ -1,0 +1,22 @@
+package authlete.services
+import authlete.apis.*
+
+trait AuthleteService[F[*]]
+    extends AuthorizationEndpoints[F]
+    with CIBAEndpoints[F]
+    with ClientExtensionEndpoints[F]
+    with ConfigurationEndpoints[F]
+    with DeviceFlowEndpoints[F]
+    with DynamicClientRegistrationEndpoints[F]
+    with GrantManagementEndpoints[F]
+    with HskOperationsEndpoints[F]
+    with IDTokenEndpoints[F]
+    with IntrospectionEndpoints[F]
+    with JoseObjectEndpoints[F]
+    with JWKSetEndpoints[F]
+    with PushedAuthorizationEndpoints[F]
+    with RevocationEndpoints[F]
+    with ServerMetadataEndpoints[F]
+    with TokenEndpoints[F]
+    with TokenOperationsEndpoints[F]
+    with UserInfoEndpoints[F]
