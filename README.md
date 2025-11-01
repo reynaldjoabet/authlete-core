@@ -150,4 +150,6 @@ final class JsoniterScalaCodec(
 object JsoniterScalaCodec{
     
 }
-```                                
+``` 
+
+The authorization server only issues access tokens, it does not authenticate the user.
